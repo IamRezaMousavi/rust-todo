@@ -2,7 +2,7 @@
  * @Author: @iamrezamousavi
  * @Date:   2023-03-24 05:26:55
  * @Last Modified by:   @iamrezamousavi
- * @Last Modified time: 2023-03-25 20:37:02
+ * @Last Modified time: 2023-03-25 21:20:44
  */
 use rusqlite::{Connection, Result};
 use serde::{Deserialize, Serialize};
@@ -25,19 +25,19 @@ impl TodoItem {
 }
 
 pub struct Database {
-    filename: String,
+    conn: Connection,
 }
 
 impl Database {
     pub fn new(filename: String) -> Self {
-        let ret = Self { filename };
+        let ret = Self {
+            conn: Connection::open(filename).unwrap(),
+        };
         ret.init();
         ret
     }
 
     pub fn init(&self) {
-        let connection = Connection::open(self.filename.clone()).unwrap();
-
         let query = "
         CREATE TABLE IF NOT EXISTS todo (
             id     INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,19 +45,17 @@ impl Database {
             isdone INTEGER DEFAULT 0
         );
         ";
-        connection.execute(query, ()).unwrap();
+        self.conn.execute(query, ()).unwrap();
     }
     pub fn insert(&self, item: TodoItem) -> Result<TodoItem, String> {
-        let connection = Connection::open(self.filename.clone()).unwrap();
-
-        connection
+        self.conn
             .execute(
                 "INSERT INTO todo (title, isdone) VALUES (?1, ?2);",
                 (&item.title, &item.is_done.to_string()),
             )
             .unwrap();
 
-        let last_id = connection.last_insert_rowid() as u32;
+        let last_id = self.conn.last_insert_rowid() as u32;
 
         Ok(TodoItem {
             id: Some(last_id),
@@ -66,9 +64,7 @@ impl Database {
         })
     }
     pub fn update(&self, item: &TodoItem) {
-        let connection = Connection::open(self.filename.clone()).unwrap();
-
-        connection
+        self.conn
             .execute(
                 "UPDATE todo
                 SET title = ?1,
@@ -83,9 +79,7 @@ impl Database {
             .unwrap();
     }
     pub fn delete(&self, item: &TodoItem) {
-        let connection = Connection::open(self.filename.clone()).unwrap();
-
-        connection
+        self.conn
             .execute(
                 "DELETE FROM todo WHERE id = ?1",
                 (&item.id.unwrap().to_string(),),
@@ -94,10 +88,9 @@ impl Database {
     }
 
     pub fn list(&self) -> Vec<TodoItem> {
-        let connection = Connection::open(self.filename.clone()).unwrap();
-
         let mut todos = vec![];
-        for todo in connection
+        for todo in self
+            .conn
             .prepare("SELECT id, title, isdone FROM todo;")
             .unwrap()
             .query_map([], |row| {
@@ -115,9 +108,8 @@ impl Database {
     }
 
     pub fn get(&self, id: u32) -> Result<TodoItem, String> {
-        let connection = Connection::open(self.filename.clone()).unwrap();
-
-        let mut stmt = connection
+        let mut stmt = self
+            .conn
             .prepare("SELECT id, title, isdone FROM todo WHERE id = ?1")
             .unwrap();
         let todo_iter = stmt
