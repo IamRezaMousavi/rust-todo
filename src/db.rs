@@ -1,17 +1,17 @@
-use serde::{Deserialize, Serialize};
 /**
  * @Author: @iamrezamousavi
  * @Date:   2023-03-24 05:26:55
  * @Last Modified by:   @iamrezamousavi
- * @Last Modified time: 2023-03-24 19:45:17
+ * @Last Modified time: 2023-03-25 20:37:02
  */
-use sqlite;
+use rusqlite::{Connection, Result};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TodoItem {
-    id: Option<i64>,
-    title: String,
-    is_done: bool,
+    pub id: Option<u32>,
+    pub title: String,
+    pub is_done: u8,
 }
 
 impl TodoItem {
@@ -19,7 +19,7 @@ impl TodoItem {
         Self {
             id: None,
             title: title.to_string(),
-            is_done: false,
+            is_done: 0,
         }
     }
 }
@@ -36,7 +36,7 @@ impl Database {
     }
 
     pub fn init(&self) {
-        let connection = sqlite::open(self.filename.clone()).unwrap();
+        let connection = Connection::open(self.filename.clone()).unwrap();
 
         let query = "
         CREATE TABLE IF NOT EXISTS todo (
@@ -45,77 +45,93 @@ impl Database {
             isdone INTEGER DEFAULT 0
         );
         ";
-        connection.execute(query).unwrap();
+        connection.execute(query, ()).unwrap();
     }
     pub fn insert(&self, item: TodoItem) -> Result<TodoItem, String> {
-        let connection = sqlite::open(self.filename.clone()).unwrap();
+        let connection = Connection::open(self.filename.clone()).unwrap();
 
-        let query = format!(
-            "INSERT INTO todo (title, isdone) VALUES ('{}', {});",
-            item.title, item.is_done,
-        );
-        connection.execute(query).unwrap();
+        connection
+            .execute(
+                "INSERT INTO todo (title, isdone) VALUES (?1, ?2);",
+                (&item.title, &item.is_done.to_string()),
+            )
+            .unwrap();
 
-        self.get(item)
+        let last_id = connection.last_insert_rowid() as u32;
+
+        Ok(TodoItem {
+            id: Some(last_id),
+            title: item.title,
+            is_done: item.is_done,
+        })
     }
-    pub fn update(&self, item: TodoItem) {
-        let connection = sqlite::open(self.filename.clone()).unwrap();
+    pub fn update(&self, item: &TodoItem) {
+        let connection = Connection::open(self.filename.clone()).unwrap();
 
-        let query = format!(
-            "UPDATE todo
-                SET title = {},
-                    isdone = {}
-                WHERE id = {}",
-            item.title,
-            item.is_done,
-            item.id.unwrap()
-        );
-        connection.execute(query).unwrap();
+        connection
+            .execute(
+                "UPDATE todo
+                SET title = ?1,
+                    isdone = ?2
+                WHERE id = ?3;",
+                (
+                    &item.title,
+                    &item.is_done.to_string(),
+                    &item.id.unwrap().to_string(),
+                ),
+            )
+            .unwrap();
     }
-    pub fn delete(&self, item: TodoItem) {
-        let connection = sqlite::open(self.filename.clone()).unwrap();
+    pub fn delete(&self, item: &TodoItem) {
+        let connection = Connection::open(self.filename.clone()).unwrap();
 
-        let query = format!("DELETE FROM todo WHERE id = {}", item.id.unwrap());
-        connection.execute(query).unwrap();
+        connection
+            .execute(
+                "DELETE FROM todo WHERE id = ?1",
+                (&item.id.unwrap().to_string(),),
+            )
+            .unwrap();
     }
-    pub fn get(&self, item: TodoItem) -> Result<TodoItem, String> {
-        let connection = sqlite::open(self.filename.clone()).unwrap();
 
-        let query = format!(
-            "
-            SELECT * FROM todo
-            WHERE title = '{}'
-            AND isdone = {};",
-            item.title, item.is_done as i8
-        );
-
-        for row in connection.prepare(query).unwrap().into_iter() {
-            let row = row.unwrap();
-            return Ok(TodoItem {
-                id: Some(row.read::<i64, _>("id")),
-                title: row.read::<&str, _>("title").to_string(),
-                is_done: row.read::<i64, _>("isdone") != 0,
-            });
-        }
-        return Err("Not Found".to_string());
-    }
     pub fn list(&self) -> Vec<TodoItem> {
-        let connection = sqlite::open(self.filename.clone()).unwrap();
+        let connection = Connection::open(self.filename.clone()).unwrap();
 
-        let mut list = vec![];
-        let query = "SELECT * FROM todo;";
-        for row in connection
-            .prepare(query)
+        let mut todos = vec![];
+        for todo in connection
+            .prepare("SELECT id, title, isdone FROM todo;")
             .unwrap()
-            .into_iter()
-            .map(|row| row.unwrap())
-        {
-            list.push(TodoItem {
-                id: Some(row.read::<i64, _>("id")),
-                title: row.read::<&str, _>("title").to_string(),
-                is_done: row.read::<i64, _>("isdone") != 0,
+            .query_map([], |row| {
+                Ok(TodoItem {
+                    id: row.get(0).unwrap(),
+                    title: row.get(1).unwrap(),
+                    is_done: row.get(2).unwrap(),
+                })
             })
+            .unwrap()
+        {
+            todos.push(todo.unwrap());
         }
-        list
+        todos
+    }
+
+    pub fn get(&self, id: u32) -> Result<TodoItem, String> {
+        let connection = Connection::open(self.filename.clone()).unwrap();
+
+        let mut stmt = connection
+            .prepare("SELECT id, title, isdone FROM todo WHERE id = ?1")
+            .unwrap();
+        let todo_iter = stmt
+            .query_map([&id], |row| {
+                Ok(TodoItem {
+                    id: row.get(0).unwrap(),
+                    title: row.get(1).unwrap(),
+                    is_done: row.get(2).unwrap(),
+                })
+            })
+            .unwrap();
+        for todo in todo_iter {
+            return Ok(todo.unwrap());
+        }
+        Err(String::from("Not match"))
     }
 }

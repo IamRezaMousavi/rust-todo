@@ -1,3 +1,6 @@
 # rust-todo
 
-A Server for todo list app implement in Rust
+A RESTful api for todo list app implement in Rust
+
+## Todo
+- [ ] add note without checkbox
