@@ -11,6 +11,11 @@ $ git clone https://github.com/IamRezaMousavi/rust-todo.git
 $ cargo run
 ```
 
+### for change port
+```bash
+$ cargo run -- -p <port_number>
+```
+
 ### for build
 ```bash
 $ cargo build --release
@@ -19,6 +24,8 @@ $ cargo build --release
 -----------------------
 
 ## Todo
-- [ ] take host and port from command line
+- [x] take host and port from command line
+- [ ] add bash completions
 - [ ] add note without checkbox
-- [*] database error handling
+- [x] database error handling
+- [ ] cleaning code

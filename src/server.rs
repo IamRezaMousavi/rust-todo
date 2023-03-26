@@ -2,7 +2,7 @@
  * @Author: @iamrezamousavi
  * @Date:   2023-03-24 17:43:42
  * @Last Modified by:   @iamrezamousavi
- * @Last Modified time: 2023-03-26 19:47:27
+ * @Last Modified time: 2023-03-26 21:16:49
  */
 use actix_web::{
     delete, get, middleware, patch, post, web, App, HttpResponse, HttpServer,
@@ -28,6 +28,39 @@ struct TodoCreateReq {
 struct TodoUpdateReq {
     title: String,
     is_done: u8,
+}
+
+pub struct TodoServer {
+    host: String,
+    port: u16,
+}
+
+impl TodoServer {
+    pub fn new(host: String, port: u16) -> Self {
+        Self { host, port }
+    }
+
+    #[actix_web::main(arg)]
+    pub async fn run(&self) -> std::io::Result<()> {
+        std::env::set_var("RUST_LOG", "info");
+        env_logger::init();
+
+        HttpServer::new(|| {
+            App::new()
+                .app_data(web::Data::new(AppState {
+                    database: Database::new(String::from("data.db")),
+                }))
+                .wrap(middleware::Logger::default())
+                .service(index)
+                .service(get_by_id)
+                .service(insert)
+                .service(update)
+                .service(delete)
+        })
+        .bind((self.host.clone(), self.port))?
+        .run()
+        .await
+    }
 }
 
 #[get("/")]
@@ -118,26 +151,4 @@ async fn delete(id: web::Path<u32>, data: web::Data<AppState>) -> HttpResponse {
             _ => HttpResponse::InternalServerError().finish(),
         },
     }
-}
-
-#[actix_web::main]
-pub async fn servermain() -> std::io::Result<()> {
-    std::env::set_var("RUST_LOG", "info");
-    env_logger::init();
-
-    HttpServer::new(|| {
-        App::new()
-            .app_data(web::Data::new(AppState {
-                database: Database::new(String::from("data.db")),
-            }))
-            .wrap(middleware::Logger::default())
-            .service(index)
-            .service(get_by_id)
-            .service(insert)
-            .service(update)
-            .service(delete)
-    })
-    .bind(("127.0.0.1", 8080))?
-    .run()
-    .await
 }
