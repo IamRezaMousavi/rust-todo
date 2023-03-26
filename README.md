@@ -19,5 +19,6 @@ $ cargo build --release
 -----------------------
 
 ## Todo
+- [ ] take host and port from command line
 - [ ] add note without checkbox
-- [ ] database error handling
+- [*] database error handling
